@@ -26,6 +26,8 @@ import flash.events.EventDispatcher;
 import flash.filters.GlowFilter;
 import flash.geom.ColorTransform;
 import flash.geom.Point;
+import flash.text.TextField;
+import flash.text.TextFormat;
 import flash.text.TextFormatAlign;
 
 import net.play5d.game.bvn.ctrler.AssetManager;
@@ -67,6 +69,8 @@ public class SelectFighterItem extends EventDispatcher {
             initMoreUI();
         }
 
+        initNameUI();
+
         if (ui.more_bg) {
             ui.more_bg.visible                  = isMore;
             ui.more_bg.mouseEnabled             = ui.more_bg.mouseChildren = false;
@@ -77,8 +81,7 @@ public class SelectFighterItem extends EventDispatcher {
             ui.more_bg.transform.colorTransform = ct;
         }
 
-//        ui.warning.visible = fighterData.hasWarning;
-        if (!fighterData.hasWarning) {
+        if (ui.warning && ui.contains(ui.warning)) {
             ui.removeChild(ui.warning);
         }
     }
@@ -94,6 +97,7 @@ public class SelectFighterItem extends EventDispatcher {
     private var faceSize:Point = new Point(50, 50);
 
     private var _moreText:BitmapText;
+    private var _nameText:TextField;
     private var _listeners:Object = {};
     private var _tweenFrom:Point;
     private var _tweenTo:Point;
@@ -181,6 +185,30 @@ public class SelectFighterItem extends EventDispatcher {
         ui.addChild(txt);
 
         _moreText = txt;
+    }
+
+    private function initNameUI():void {
+        if (!fighterData || !fighterData.name) {
+            return;
+        }
+
+        var size:int = fighterData.name.length > 13 ? 7 : fighterData.name.length > 9 ? 8 : 9;
+        var fmt:TextFormat = new TextFormat('_sans', size, 0xffffff, true);
+        fmt.align = TextFormatAlign.CENTER;
+
+        var txt:TextField = new TextField();
+        txt.mouseEnabled = false;
+        txt.selectable = false;
+        txt.width = 72;
+        txt.height = 16;
+        txt.x = -11;
+        txt.y = 48;
+        txt.defaultTextFormat = fmt;
+        txt.filters = [new GlowFilter(0, 1, 3, 3, 2)];
+        txt.text = fighterData.name;
+        ui.addChild(txt);
+
+        _nameText = txt;
     }
 
     private function selfHandler(e:Event):void {

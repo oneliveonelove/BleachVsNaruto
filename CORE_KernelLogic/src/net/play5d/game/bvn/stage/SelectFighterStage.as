@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2021-2024, 5DPLAY Game Studio
  * All rights reserved.
  *
@@ -28,6 +28,8 @@ import flash.display.SimpleButton;
 import flash.events.Event;
 import flash.events.MouseEvent;
 import flash.events.TouchEvent;
+import flash.text.TextField;
+import flash.text.TextFormat;
 import flash.geom.Point;
 import flash.utils.Dictionary;
 import flash.utils.setTimeout;
@@ -119,12 +121,59 @@ public class SelectFighterStage implements IStage {
         return _p1Slt && _p1Slt.selectFinish();
     }
 
+    private function createFallbackBtn(name:String, isUp:Boolean):Sprite {
+        var btn:Sprite = new Sprite();
+        btn.name = name;
+        
+        var btnSize:Number = 50;
+        
+        // Background
+        btn.graphics.beginFill(0x000000, 0.5);
+        btn.graphics.lineStyle(1.5, 0xFFFFFF, 0.7);
+        btn.graphics.drawRoundRect(0, 0, btnSize, btnSize, 10, 10);
+        btn.graphics.endFill();
+        
+        // Arrow
+        btn.graphics.beginFill(0xFFFFFF, 0.9);
+        btn.graphics.lineStyle(); // No border for arrow
+        if (isUp) {
+            btn.graphics.moveTo(btnSize / 2, btnSize * 0.25);
+            btn.graphics.lineTo(btnSize * 0.75, btnSize * 0.75);
+            btn.graphics.lineTo(btnSize * 0.25, btnSize * 0.75);
+        } else {
+            btn.graphics.moveTo(btnSize / 2, btnSize * 0.75);
+            btn.graphics.lineTo(btnSize * 0.75, btnSize * 0.25);
+            btn.graphics.lineTo(btnSize * 0.25, btnSize * 0.25);
+        }
+        btn.graphics.endFill();
+        
+        // Position at the far right
+        var startX:Number = GameConfig.GAME_SIZE.x - btnSize - 10;
+        btn.x = startX;
+        
+        // UP button at the very top, DOWN button at the very bottom
+        if (isUp) {
+            btn.y = 5;
+        } else {
+            btn.y = GameConfig.GAME_SIZE.y - btnSize - 5;
+        }
+        
+        btn.mouseChildren = false;
+        btn.buttonMode = true;
+        
+        return btn;
+    }
+
     private function initPageBtn():void {
-        var names:Array = ["bu2", "bu4", "bu1", "bu3"];
-        var handlers:Array = [pageUpHandler, pageUpHandler, pageDownHandler, pageDownHandler];
+        var names:Array = ["bu2", "bu1"];
+        var handlers:Array = [pageUpHandler, pageDownHandler];
 
         for (var i:int = 0; i < names.length; i++) {
             var btn:InteractiveObject = _ui.getChildByName(names[i]) as InteractiveObject;
+            if (!btn) {
+                btn = createFallbackBtn(names[i], i == 0);
+                _ui.addChild(btn);
+            }
             if (btn) {
                 _ui.addChild(btn); // Bring to front
                 if (GameConfig.TOUCH_MODE) {
@@ -134,15 +183,13 @@ public class SelectFighterStage implements IStage {
                 }
                 btn.visible = true;
                 trace("[SelectFighterStage] Found and initialized button: " + names[i]);
-            } else {
-                trace("[SelectFighterStage] Button not found in UI: " + names[i]);
             }
         }
     }
 
     private function removePageBtn():void {
-        var names:Array = ["bu2", "bu4", "bu1", "bu3"];
-        var handlers:Array = [pageUpHandler, pageUpHandler, pageDownHandler, pageDownHandler];
+        var names:Array = ["bu2", "bu1"];
+        var handlers:Array = [pageUpHandler, pageDownHandler];
 
         for (var i:int = 0; i < names.length; i++) {
             var btn:InteractiveObject = _ui.getChildByName(names[i]) as InteractiveObject;
