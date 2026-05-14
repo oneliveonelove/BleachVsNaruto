@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2021-2024, 5DPLAY Game Studio
  * All rights reserved.
  *
@@ -22,7 +22,9 @@ import com.greensock.easing.Back;
 
 import flash.display.Bitmap;
 import flash.display.DisplayObject;
+import flash.display.InteractiveObject;
 import flash.display.Sprite;
+import flash.display.SimpleButton;
 import flash.events.Event;
 import flash.events.MouseEvent;
 import flash.events.TouchEvent;
@@ -70,6 +72,7 @@ public class SelectFighterStage implements IStage {
     private static const SELECT_STATE_ASSIST:int  = 1;
     private static const SELECT_STATE_MAP:int     = 2;
     public static var AUTO_FINISH:Boolean = true;
+    public static var LOCAL_SELECT_PLAYER:int = 0;
 
     public function SelectFighterStage() {
     }
@@ -86,10 +89,17 @@ public class SelectFighterStage implements IStage {
     private var _mapSelectUI:SelectMapUI;
     private var _curStep:int = 0;
     private var _tweenTime:int = 500;
-    private var _twoPlayerSelectFin:Boolean;  //解决两玩家同时选人
+    private var _twoPlayerSelectFin:Boolean;  //Ã¨Â§Â£Ã¥â€ Â³Ã¤Â¸Â¤Ã§Å½Â©Ã¥Â®Â¶Ã¥ÂÅ’Ã¦â€”Â¶Ã©â‚¬â€°Ã¤ÂºÂº
     [Embed(source='/../assets/cancel.png')]
     private var _backMenuPicClass:Class;
     private var _backMenuBtn:Sprite;
+    
+    // Pagination state
+    private static const SELECT_PAGE_STEP:Number = 493;
+    private static const SELECT_PAGE_ROWS:int = 7;
+    private var _pageIndex:int = 0;
+    private var _pageChanging:Boolean = false;
+    private var _pageCount:int = 1;
     /**
      * *******************************************************************************************************************************************************
      */
@@ -99,7 +109,7 @@ public class SelectFighterStage implements IStage {
     private var _moreFighterCache:Object   = {};
 
     /**
-     * 显示对象
+     * Ã¦ËœÂ¾Ã§Â¤ÂºÃ¥Â¯Â¹Ã¨Â±Â¡
      */
     public function get display():DisplayObject {
         return _ui;
@@ -109,83 +119,47 @@ public class SelectFighterStage implements IStage {
         return _p1Slt && _p1Slt.selectFinish();
     }
 
-//		private function initPageBtn():void{
-//			// 雨兮定制
-//			var upBtn:SimpleButton = _ui.getChildByName("bu2") as SimpleButton;
-//			var upBtn2:SimpleButton = _ui.getChildByName("bu4") as SimpleButton;
-//			var downBtn:SimpleButton = _ui.getChildByName("bu1") as SimpleButton;
-//			var downBtn2:SimpleButton = _ui.getChildByName("bu3") as SimpleButton;
-//
-//			if(GameConfig.TOUCH_MODE){
-//				if(upBtn){
-//					upBtn.addEventListener(TouchEvent.TOUCH_TAP, pageUpHandler);
-//					upBtn.visible = true;
-//				}
-//				if(upBtn2){
-//					upBtn2.addEventListener(TouchEvent.TOUCH_TAP, pageUpHandler);
-//					upBtn2.visible = true;
-//				}
-//				if(downBtn){
-//					downBtn.addEventListener(TouchEvent.TOUCH_TAP, pageDownHandler);
-//					downBtn.visible = true;
-//				}
-//				if(downBtn2){
-//					downBtn2.addEventListener(TouchEvent.TOUCH_TAP, pageDownHandler);
-//					downBtn2.visible = true;
-//				}
-//			}else{
-//				if(upBtn){
-//					upBtn.addEventListener(MouseEvent.CLICK, pageUpHandler);
-//					upBtn.visible = true;
-//				}
-//				if(upBtn2){
-//					upBtn2.addEventListener(MouseEvent.CLICK, pageUpHandler);
-//					upBtn2.visible = true;
-//				}
-//				if(downBtn){
-//					downBtn.addEventListener(MouseEvent.CLICK, pageDownHandler);
-//					downBtn.visible = true;
-//				}
-//				if(downBtn2){
-//					downBtn2.addEventListener(MouseEvent.CLICK, pageDownHandler);
-//					downBtn2.visible = true;
-//				}
-//			}
-//		}
-//		private function removePageBtn():void{
-//			var upBtn:SimpleButton = _ui.getChildByName("bu2") as SimpleButton;
-//			var upBtn2:SimpleButton = _ui.getChildByName("bu4") as SimpleButton;
-//			var downBtn:SimpleButton = _ui.getChildByName("bu1") as SimpleButton;
-//			var downBtn2:SimpleButton = _ui.getChildByName("bu3") as SimpleButton;
-//
-//			if(upBtn){
-//				upBtn.removeEventListener(TouchEvent.TOUCH_TAP, pageUpHandler);
-//				upBtn.removeEventListener(MouseEvent.CLICK, pageUpHandler);
-//				upBtn.visible = false;
-//			}
-//			if(upBtn2){
-//				upBtn2.removeEventListener(TouchEvent.TOUCH_TAP, pageUpHandler);
-//				upBtn2.removeEventListener(MouseEvent.CLICK, pageUpHandler);
-//				upBtn2.visible = false;
-//			}
-//			if(downBtn){
-//				downBtn.removeEventListener(TouchEvent.TOUCH_TAP, pageDownHandler);
-//				downBtn.removeEventListener(MouseEvent.CLICK, pageDownHandler);
-//				downBtn.visible = false;
-//			}
-//			if(downBtn2){
-//				downBtn2.removeEventListener(TouchEvent.TOUCH_TAP, pageDownHandler);
-//				downBtn2.removeEventListener(MouseEvent.CLICK, pageDownHandler);
-//				downBtn2.visible = false;
-//			}
-//		}
+    private function initPageBtn():void {
+        var names:Array = ["bu2", "bu4", "bu1", "bu3"];
+        var handlers:Array = [pageUpHandler, pageUpHandler, pageDownHandler, pageDownHandler];
+
+        for (var i:int = 0; i < names.length; i++) {
+            var btn:InteractiveObject = _ui.getChildByName(names[i]) as InteractiveObject;
+            if (btn) {
+                _ui.addChild(btn); // Bring to front
+                if (GameConfig.TOUCH_MODE) {
+                    btn.addEventListener(TouchEvent.TOUCH_TAP, handlers[i]);
+                } else {
+                    btn.addEventListener(MouseEvent.CLICK, handlers[i]);
+                }
+                btn.visible = true;
+                trace("[SelectFighterStage] Found and initialized button: " + names[i]);
+            } else {
+                trace("[SelectFighterStage] Button not found in UI: " + names[i]);
+            }
+        }
+    }
+
+    private function removePageBtn():void {
+        var names:Array = ["bu2", "bu4", "bu1", "bu3"];
+        var handlers:Array = [pageUpHandler, pageUpHandler, pageDownHandler, pageDownHandler];
+
+        for (var i:int = 0; i < names.length; i++) {
+            var btn:InteractiveObject = _ui.getChildByName(names[i]) as InteractiveObject;
+            if (btn) {
+                btn.removeEventListener(TouchEvent.TOUCH_TAP, handlers[i]);
+                btn.removeEventListener(MouseEvent.CLICK, handlers[i]);
+                btn.visible = false;
+            }
+        }
+    }
 
     public function get p2SelectFinish():Boolean {
         return _p2Slt && _p2Slt.selectFinish();
     }
 
     /**
-     * 构建
+     * Ã¦Å¾â€žÃ¥Â»Âº
      */
     public function build():void {
         _ui            = ResUtils.I.createDisplayObject(ResUtils.swfLib.select, ResUtils.SELECT);
@@ -221,12 +195,12 @@ public class SelectFighterStage implements IStage {
 
     public function nextStep():void {
         switch (_curStep) {
-        case 0: //初始化
+        case 0: //Ã¥Ë†ÂÃ¥Â§â€¹Ã¥Å’â€“
             initFighter();
             _curStep = 1;
             break;
         case 1:
-            //主角选择完成
+            //Ã¤Â¸Â»Ã¨Â§â€™Ã©â‚¬â€°Ã¦â€¹Â©Ã¥Â®Å’Ã¦Ë†Â
             if (GameMode.isVsCPU()) {
                 _p1Slt.removeSelecter();
                 _p1Slt.enabled = false;
@@ -235,7 +209,7 @@ public class SelectFighterStage implements IStage {
                 _curStep         = 2;
             }
             else {
-                //初始化辅助
+                //Ã¥Ë†ÂÃ¥Â§â€¹Ã¥Å’â€“Ã¨Â¾â€¦Ã¥Å Â©
 
                 fadOutList(initAssist);
 
@@ -246,13 +220,13 @@ public class SelectFighterStage implements IStage {
 
             break;
         case 2:
-            //初始化辅助
+            //Ã¥Ë†ÂÃ¥Â§â€¹Ã¥Å’â€“Ã¨Â¾â€¦Ã¥Å Â©
 //					initAssist();
             fadOutList(initAssist);
             _curStep = 3;
             break;
         case 3:
-            //主角辅助选择完成
+            //Ã¤Â¸Â»Ã¨Â§â€™Ã¨Â¾â€¦Ã¥Å Â©Ã©â‚¬â€°Ã¦â€¹Â©Ã¥Â®Å’Ã¦Ë†Â
             if (GameMode.isVsCPU()) {
                 _p1Slt.removeSelecter();
                 _p1Slt.enabled = false;
@@ -263,7 +237,7 @@ public class SelectFighterStage implements IStage {
             else {
 
                 if (GameMode.isVsCPU() || GameMode.isVsPeople()) {
-                    //选择地图
+                    //Ã©â‚¬â€°Ã¦â€¹Â©Ã¥Å“Â°Ã¥â€ºÂ¾
 
                     fadOutList(initMap);
 
@@ -273,12 +247,12 @@ public class SelectFighterStage implements IStage {
                 else {
 
                     if (GameMode.isArcade()) {
-                        //开始运行过关模式
+                        //Ã¥Â¼â‚¬Ã¥Â§â€¹Ã¨Â¿ÂÃ¨Â¡Å’Ã¨Â¿â€¡Ã¥â€¦Â³Ã¦Â¨Â¡Ã¥Â¼Â
                         startAcradeGame();
                     }
 
                     if (GameMode.currentMode == GameMode.MUSOU_ARCADE) {
-                        //开始运行过关模式
+                        //Ã¥Â¼â‚¬Ã¥Â§â€¹Ã¨Â¿ÂÃ¨Â¡Å’Ã¨Â¿â€¡Ã¥â€¦Â³Ã¦Â¨Â¡Ã¥Â¼Â
                         startMosouGame();
                     }
 
@@ -287,7 +261,7 @@ public class SelectFighterStage implements IStage {
             }
             break;
         case 4:
-            //选择地图
+            //Ã©â‚¬â€°Ã¦â€¹Â©Ã¥Å“Â°Ã¥â€ºÂ¾
             _curStep = 5;
             fadOutList(initMap);
 //					initMap();
@@ -300,19 +274,19 @@ public class SelectFighterStage implements IStage {
     }
 
     public function goLoadGame():void {
-        trace("开始游戏");
+        trace("Ã¥Â¼â‚¬Ã¥Â§â€¹Ã¦Â¸Â¸Ã¦Ë†Â");
         StateCtrl.I.transIn(MainGame.I.loadGame);
     }
 
     /**
-     * 稍后构建
+     * Ã§Â¨ÂÃ¥ÂÅ½Ã¦Å¾â€žÃ¥Â»Âº
      */
     public function afterBuild():void {
     }
 
     /**
-     * 销毁
-     * @param back 回调函数
+     * Ã©â€â‚¬Ã¦Â¯Â
+     * @param back Ã¥â€ºÅ¾Ã¨Â°Æ’Ã¥â€¡Â½Ã¦â€¢Â°
      */
     public function destroy(back:Function = null):void {
         clear();
@@ -348,7 +322,7 @@ public class SelectFighterStage implements IStage {
     }
 
     private function initFighter():void {
-        trace('初始化选人');
+        trace('Ã¥Ë†ÂÃ¥Â§â€¹Ã¥Å’â€“Ã©â‚¬â€°Ã¤ÂºÂº');
         clear();
         _selectState = SELECT_STATE_FIGHTER;
         buildList(_config.charList);
@@ -360,23 +334,23 @@ public class SelectFighterStage implements IStage {
 
         GameInputer.enabled = false;
         setTimeout(initSelecter, _tweenTime);
-        // 雨兮定制删除
-//			initPageBtn();
+        // Ã©â€ºÂ¨Ã¥â€¦Â®Ã¥Â®Å¡Ã¥Ë†Â¶Ã¥Ë†Â Ã©â„¢Â¤
+			initPageBtn();
         if (GameConfig.TOUCH_MODE) {
             initBackBtn();
         }
 //			initSelecter();
     }
 
-    //初始化辅助
+    //Ã¥Ë†ÂÃ¥Â§â€¹Ã¥Å’â€“Ã¨Â¾â€¦Ã¥Å Â©
     private function initAssist():void {
-        trace('初始化辅助');
+        trace('Ã¥Ë†ÂÃ¥Â§â€¹Ã¥Å’â€“Ã¨Â¾â€¦Ã¥Å Â©');
         clear();
         _selectState = SELECT_STATE_ASSIST;
         buildList(_config.assistList);
         GameInputer.enabled = false;
-        // 雨兮定制删除
-//			initPageBtn();
+        // Ã©â€ºÂ¨Ã¥â€¦Â®Ã¥Â®Å¡Ã¥Ë†Â¶Ã¥Ë†Â Ã©â„¢Â¤
+			initPageBtn();
         if (GameConfig.TOUCH_MODE) {
             initBackBtn();
         }
@@ -447,12 +421,17 @@ public class SelectFighterStage implements IStage {
             _p2SelectedGroup = null;
         }
 
-//			removePageBtn();
+			removePageBtn();
 
     }
 
     private function buildList(list:SelectCharListConfigVO):void {
         _fighterListUI.y = 0;
+        _pageIndex = 0;
+        _pageChanging = false;
+        
+        var vCount:int = list.VCount;
+        _pageCount = Math.ceil(vCount / SELECT_PAGE_ROWS);
 
         var startX:Number = _config.x + _config.left;
         var startY:Number = _config.y + _config.top;
@@ -510,7 +489,7 @@ public class SelectFighterStage implements IStage {
         var fv:FighterVO = _selectState == SELECT_STATE_ASSIST ? AssisterModel.I.getAssister(sv.fighterID) :
                            FighterModel.I.getFighter(sv.fighterID);
         if (!fv) {
-            Debugger.log('SelectFighterStage.addFighterItem :: 未找到角色数据：' + sv.fighterID);
+            Debugger.log('SelectFighterStage.addFighterItem :: Ã¦Å“ÂªÃ¦â€°Â¾Ã¥Ë†Â°Ã¨Â§â€™Ã¨â€°Â²Ã¦â€¢Â°Ã¦ÂÂ®Ã¯Â¼Å¡' + sv.fighterID);
             return null;
         }
 
@@ -555,6 +534,9 @@ public class SelectFighterStage implements IStage {
     }
 
     private function selectFighterTouchHandler(type:String, target:SelectFighterItem):void {
+        if (_pageChanging) {
+            return;
+        }
         if (!target || (
                 !target.selectData && !target.isMore
         )) {
@@ -789,10 +771,10 @@ public class SelectFighterStage implements IStage {
 
         if (checkSelected(slt, sf)) {
             if (up || down) {
-                //下一行已被选中，向右移一个
+                //Ã¤Â¸â€¹Ã¤Â¸â‚¬Ã¨Â¡Å’Ã¥Â·Â²Ã¨Â¢Â«Ã©â‚¬â€°Ã¤Â¸Â­Ã¯Â¼Å’Ã¥Ââ€˜Ã¥ÂÂ³Ã§Â§Â»Ã¤Â¸â‚¬Ã¤Â¸Âª
                 var succ:Boolean = moveSlt(slt, slt.x + 1, slt.y);
                 if (!succ) {
-                    //如果上一行或下一行已经选满，继续找上一行或下一行
+                    //Ã¥Â¦â€šÃ¦Å¾Å“Ã¤Â¸Å Ã¤Â¸â‚¬Ã¨Â¡Å’Ã¦Ë†â€“Ã¤Â¸â€¹Ã¤Â¸â‚¬Ã¨Â¡Å’Ã¥Â·Â²Ã§Â»ÂÃ©â‚¬â€°Ã¦Â»Â¡Ã¯Â¼Å’Ã§Â»Â§Ã§Â»Â­Ã¦â€°Â¾Ã¤Â¸Å Ã¤Â¸â‚¬Ã¨Â¡Å’Ã¦Ë†â€“Ã¤Â¸â€¹Ã¤Â¸â‚¬Ã¨Â¡Å’
                     if (up) {
                         moveSlt(slt, slt.x, slt.y - 1);
                     }
@@ -858,7 +840,7 @@ public class SelectFighterStage implements IStage {
     }
 
     /**
-     * 人物关联的更多人物
+     * Ã¤ÂºÂºÃ§â€°Â©Ã¥â€¦Â³Ã¨Ââ€Ã§Å¡â€žÃ¦â€ºÂ´Ã¥Â¤Å¡Ã¤ÂºÂºÃ§â€°Â©
      */
     private function showMoreFighters(slt:SelecterItemUI, sf:SelectFighterItem):void {
 
@@ -885,7 +867,7 @@ public class SelectFighterStage implements IStage {
         }
 
 
-        // 检查缓存 ===========================================================
+        // Ã¦Â£â‚¬Ã¦Å¸Â¥Ã§Â¼â€œÃ¥Â­Ëœ ===========================================================
         fighterItems = _moreFighterCache[sf.fighterData.id];
         if (fighterItems && fighterItems.length > 0) {
             for (i = 0; i < fighterItems.length; i++) {
@@ -898,12 +880,12 @@ public class SelectFighterStage implements IStage {
             return;
         }
 
-        // 创建新的头像 =====================================================
+        // Ã¥Ë†â€ºÃ¥Â»ÂºÃ¦â€“Â°Ã§Å¡â€žÃ¥Â¤Â´Ã¥Æ’Â =====================================================
         var fighterIds:Array = sf.selectData.moreFighterIDs;
 
         fighterItems = new ArrayMap();
 
-        // 周围, 一圈8个位置
+        // Ã¥â€˜Â¨Ã¥â€ºÂ´, Ã¤Â¸â‚¬Ã¥Å“Ë†8Ã¤Â¸ÂªÃ¤Â½ÂÃ§Â½Â®
         var posArr:Array = [
             new Point(0, -1), new Point(0, 1), new Point(-1, 0), new Point(1, 0), new Point(-1, -1), new Point(1, -1),
             new Point(-1, 1), new Point(1, 1)
@@ -917,7 +899,7 @@ public class SelectFighterStage implements IStage {
             var fv:FighterVO = _selectState == SELECT_STATE_ASSIST ? AssisterModel.I.getAssister(fid) :
                                FighterModel.I.getFighter(fid);
             if (!fv) {
-                Debugger.log('SelectFighterStage.addFighterItem :: 未找到角色数据：' + fid);
+                Debugger.log('SelectFighterStage.addFighterItem :: Ã¦Å“ÂªÃ¦â€°Â¾Ã¥Ë†Â°Ã¨Â§â€™Ã¨â€°Â²Ã¦â€¢Â°Ã¦ÂÂ®Ã¯Â¼Å¡' + fid);
                 continue;
             }
 
@@ -927,13 +909,15 @@ public class SelectFighterStage implements IStage {
             var morePosition:Point = null;
             var addN:int           = 0;
             var fighterPos:Point   = null;
+            var loopCount:int      = 0;
             while (morePosition == null) {
                 var psn:int = posSN % 8;
                 posSN++;
+                loopCount++;
 
                 var pos:Point = posArr[psn];
                 if (!pos) {
-                    Debugger.log('pos未定义' + psn + ' / ' + posSN);
+                    Debugger.log('posÃ¦Å“ÂªÃ¥Â®Å¡Ã¤Â¹â€°' + psn + ' / ' + posSN);
                     continue;
                 }
 
@@ -948,13 +932,15 @@ public class SelectFighterStage implements IStage {
                         )
                 );
 
-                if (mmx < 0 || mmx > GameConfig.GAME_SIZE.x) {
-                    Debugger.log('pos.x 越界 (' + mmx + ')  ' + psn + ' / ' + posSN);
-                    continue;
-                }
-                if (mmy < 0 || mmy > GameConfig.GAME_SIZE.y) {
-                    Debugger.log('pos.y 越界 (' + mmy + ')  ' + psn + ' / ' + posSN);
-                    continue;
+                if (loopCount <= 8) {
+                    if (mmx + _fighterListUI.x < 0 || mmx + _fighterListUI.x > GameConfig.GAME_SIZE.x) {
+                        Debugger.log('pos.x Ã¨Â¶Å Ã§â€¢Å’ (' + mmx + ')  ' + psn + ' / ' + posSN);
+                        continue;
+                    }
+                    if (mmy + _fighterListUI.y < 0 || mmy + _fighterListUI.y > GameConfig.GAME_SIZE.y) {
+                        Debugger.log('pos.y Ã¨Â¶Å Ã§â€¢Å’ (' + mmy + ')  ' + psn + ' / ' + posSN);
+                        continue;
+                    }
                 }
 
                 fighterPos   = pos.clone();
@@ -1118,16 +1104,22 @@ public class SelectFighterStage implements IStage {
             }
         }
 
-        moveSlt(slt, slt.x + addX, slt.y + addY);
+        if (moveSlt(slt, slt.x + addX, slt.y + addY)) {
+            syncPageToSelecter(slt);
+        }
     }
 
     private function render():void {
+        if (_pageChanging) {
+            return;
+        }
+
         if (GameInputer.back(1)) {
             if (GameUI.showingDialog()) {
                 GameUI.cancelConfrim();
             }
             else {
-                GameUI.confrim('BACK TITLE?', '返回到主菜单？', MainGame.I.goMenu, null, IsMobile());
+                GameUI.confrim('BACK TITLE?', 'Ã¨Â¿â€Ã¥â€ºÅ¾Ã¥Ë†Â°Ã¤Â¸Â»Ã¨ÂÅ“Ã¥Ââ€¢Ã¯Â¼Å¸', MainGame.I.goMenu, null, IsMobile());
                 GameEvent.dispatchEvent(GameEvent.CONFRIM_BACK_MENU);
             }
         }
@@ -1256,7 +1248,7 @@ public class SelectFighterStage implements IStage {
     }
 
     private function initMap():void {
-        trace('选择地图');
+        trace('Ã©â‚¬â€°Ã¦â€¹Â©Ã¥Å“Â°Ã¥â€ºÂ¾');
 
         GameEvent.dispatchEvent(GameEvent.SELECT_MAP);
 
@@ -1326,34 +1318,87 @@ public class SelectFighterStage implements IStage {
     }
 
     private function backMenuHandler(e:Event):void {
-        GameUI.confrim('BACK TITLE?', '返回到主菜单？', MainGame.I.goMenu, null, IsMobile());
+        GameUI.confrim('BACK TITLE?', 'Ã¨Â¿â€Ã¥â€ºÅ¾Ã¥Ë†Â°Ã¤Â¸Â»Ã¨ÂÅ“Ã¥Ââ€¢Ã¯Â¼Å¸', MainGame.I.goMenu, null, IsMobile());
         GameEvent.dispatchEvent(GameEvent.CONFRIM_BACK_MENU);
     }
 
     private function pageUpHandler(e:Event):void {
-        if (_fighterListUI.height <= GameConfig.GAME_SIZE.y) {
-            return;
-        }
-
-        var toY:Number  = _fighterListUI.y + 493;
-        var maxY:Number = 0;
-        if (toY > maxY) {
-            toY = maxY;
-        }
-        TweenLite.to(_fighterListUI, .2, {y: toY});
+        setSelectPage(_pageIndex - 1, true);
     }
 
     private function pageDownHandler(e:Event):void {
-        if (_fighterListUI.height <= GameConfig.GAME_SIZE.y) {
+        setSelectPage(_pageIndex + 1, true);
+    }
+
+    private function setSelectPage(page:int, moveSelecters:Boolean = false):void {
+        if (_pageCount <= 1) {
             return;
         }
 
-        var toY:Number  = _fighterListUI.y - 493;
-        var minY:Number = -_fighterListUI.height + 493;
-        if (toY < minY) {
-            toY = minY;
+        if (page < 0) {
+            page = 0;
         }
-        TweenLite.to(_fighterListUI, .2, {y: toY});
+        if (page > _pageCount - 1) {
+            page = _pageCount - 1;
+        }
+        if (page == _pageIndex && _fighterListUI.y == -SELECT_PAGE_STEP * page) {
+            return;
+        }
+
+        _pageIndex          = page;
+        _pageChanging       = true;
+        GameInputer.enabled = false;
+
+        if (moveSelecters) {
+            moveSelecterToPage(_p1Slt);
+            moveSelecterToPage(_p2Slt);
+        }
+
+        var targetPage:int = _pageIndex;
+        TweenLite.killTweensOf(_fighterListUI);
+        TweenLite.to(_fighterListUI, .16, {
+            y: -SELECT_PAGE_STEP * targetPage,
+            onComplete: function ():void {
+                _pageChanging       = false;
+                GameInputer.enabled = true;
+            }
+        });
+    }
+
+    private function moveSelecterToPage(slt:SelecterItemUI):void {
+        if (!slt || !slt.enabled || !_curListConfig) {
+            return;
+        }
+
+        var minRow:int = _pageIndex * SELECT_PAGE_ROWS;
+        var maxRow:int = Math.min(_curListConfig.VCount - 1, minRow + SELECT_PAGE_ROWS - 1);
+        if (slt.y >= minRow && slt.y <= maxRow) {
+            var snapItem:SelectFighterItem = getFighterItem(slt.x, slt.y);
+            if (snapItem) {
+                slt.moveTo(snapItem.ui.x, snapItem.ui.y);
+            }
+            return;
+        }
+
+        if (!moveSlt(slt, slt.x, minRow, true)) {
+            for (var row:int = minRow; row <= maxRow; row++) {
+                if (moveSlt(slt, 0, row, true)) {
+                    return;
+                }
+            }
+        }
+    }
+
+    private function syncPageToSelecter(slt:SelecterItemUI):void {
+        if (!slt || _pageCount <= 1 || _pageChanging) {
+            return;
+        }
+
+        var page:int = int(slt.y / SELECT_PAGE_ROWS);
+        if (page != _pageIndex) {
+            setSelectPage(page);
+        }
     }
 }
 }
+
