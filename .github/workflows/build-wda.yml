@@ -1,4 +1,4 @@
-name: Build and Sign WDA
+name: Build Unsigned WDA
 
 on:
   workflow_dispatch:
@@ -13,77 +13,17 @@ jobs:
           repository: appium/WebDriverAgent
           ref: master
 
-      - name: Install Apple Certificate
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_P12_BASE64 }}
-          P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
-          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_MOBILEPROVISION_BASE64 }}
-          KEYCHAIN_PASSWORD: "buildagentpassword"
+      - name: Build and Archive WebDriverAgentRunner (Unsigned)
         run: |
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
-          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 -D > $CERTIFICATE_PATH
-          ls -la $CERTIFICATE_PATH
-          
-          # Convert P12 to legacy format using standard algorithms compatible with LibreSSL
-          openssl pkcs12 -in $CERTIFICATE_PATH -passin pass:"$P12_PASSWORD" -out $RUNNER_TEMP/temp.pem -nodes
-          openssl pkcs12 -export -in $RUNNER_TEMP/temp.pem -out $CERTIFICATE_PATH -passout pass:"$P12_PASSWORD" -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES
-          rm $RUNNER_TEMP/temp.pem
-          ls -la $CERTIFICATE_PATH
-          
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 -D > $PP_PATH
-          ls -la $PP_PATH
-
-          # Create custom keychain
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security default-keychain -s $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          # Download and import Apple Worldwide Developer Relations G3 intermediate certificate to complete the trust chain
-          curl -sS https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o $RUNNER_TEMP/AppleWWDRCAG3.cer
-          security import $RUNNER_TEMP/AppleWWDRCAG3.cer -k $KEYCHAIN_PATH
-
-          # Import our custom certificate
-          security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/56MY3ZN5V7.com.uusafe.portal.mobileprovision
-
-      - name: Patch WebDriverAgent Xcode Project
-        run: |
-          python3 -c '
-          import re
-          proj_path = "WebDriverAgent.xcodeproj/project.pbxproj"
-          with open(proj_path, "r") as f:
-              content = f.read()
-              
-          # Regex to find buildSettings block containing com.facebook.WebDriverAgentRunner
-          pattern = r"(buildSettings\s*=\s*\{[^}]*PRODUCT_BUNDLE_IDENTIFIER\s*=\s*(?:\"com\.facebook\.WebDriverAgentRunner\"|com\.facebook\.WebDriverAgentRunner);[^}]*\})"
-          
-          def replace_config(match):
-              block = match.group(1)
-              # Replace bundle ID
-              block = block.replace("com.facebook.WebDriverAgentRunner", "com.uusafe.portal")
-              # Remove duplicate keys if they exist
-              block = re.sub(r"DEVELOPMENT_TEAM\s*=\s*[^;]+;", "", block)
-              block = re.sub(r"PROVISIONING_PROFILE_SPECIFIER\s*=\s*[^;]+;", "", block)
-              block = re.sub(r"CODE_SIGN_IDENTITY\s*=\s*[^;]+;", "", block)
-              block = re.sub(r"CODE_SIGN_STYLE\s*=\s*[^;]+;", "", block)
-              
-              # Insert signing parameters
-              insert_str = "\n\t\t\t\tDEVELOPMENT_TEAM = 56MY3ZN5V7;\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = MosDistribute;\n\t\t\t\tCODE_SIGN_IDENTITY = \"iPhone Distribution\";\n\t\t\t\tCODE_SIGN_STYLE = Manual;"
-              block = block.replace("buildSettings = {", "buildSettings = {" + insert_str)
-              return block
-              
-          modified_content = re.sub(pattern, replace_config, content)
-          with open(proj_path, "w") as f:
-              f.write(modified_content)
-              
-          print("Xcode project successfully patched for target WebDriverAgentRunner!")
-          '
+          xcodebuild archive \
+            -project WebDriverAgent.xcodeproj \
+            -scheme WebDriverAgentRunner \
+            -destination 'generic/platform=iOS' \
+            -archivePath $RUNNER_TEMP/WDA.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS=""
 
       - name: Create Export Options Plist
         run: |
@@ -93,38 +33,25 @@ jobs:
           <plist version="1.0">
           <dict>
               <key>method</key>
-              <string>enterprise</string>
-              <key>teamID</key>
-              <string>56MY3ZN5V7</string>
+              <string>development</string>
               <key>compileBitcode</key>
               <false/>
               <key>uploadSymbols</key>
               <false/>
               <key>signingStyle</key>
               <string>manual</string>
-              <key>provisioningProfiles</key>
-              <dict>
-                  <key>com.uusafe.portal</key>
-                  <string>MosDistribute</string>
-              </dict>
           </dict>
           </plist>
           EOF
 
-      - name: Build and Archive WebDriverAgentRunner
-        run: |
-          xcodebuild archive \
-            -project WebDriverAgent.xcodeproj \
-            -scheme WebDriverAgentRunner \
-            -destination 'generic/platform=iOS' \
-            -archivePath $RUNNER_TEMP/WDA.xcarchive
-
-      - name: Export WDA IPA
+      - name: Export WDA IPA (Unsigned)
         run: |
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/WDA.xcarchive \
             -exportPath $RUNNER_TEMP/Exported \
-            -exportOptionsPlist wda_export_options.plist
+            -exportOptionsPlist wda_export_options.plist \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_REQUIRED=NO
 
       - name: Upload WDA Artifact
         uses: actions/upload-artifact@v4
