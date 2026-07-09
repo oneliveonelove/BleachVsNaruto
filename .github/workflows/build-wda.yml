@@ -18,9 +18,11 @@ jobs:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
           BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_MOBILEPROVISION_BASE64 }}
+          KEYCHAIN_PASSWORD: "buildagentpassword"
         run: |
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
           PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 -D > $CERTIFICATE_PATH
           ls -la $CERTIFICATE_PATH
@@ -34,10 +36,18 @@ jobs:
           echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 -D > $PP_PATH
           ls -la $PP_PATH
 
-          # Import to standard login keychain (which contains Apple intermediate certificates)
-          security unlock-keychain -p "" ~/Library/Keychains/login.keychain-db
-          security import $CERTIFICATE_PATH -k ~/Library/Keychains/login.keychain-db -P "$P12_PASSWORD" -A -t cert -f pkcs12
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" ~/Library/Keychains/login.keychain-db
+          # Create custom keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security default-keychain -s $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Download and import Apple Worldwide Developer Relations G3 intermediate certificate to complete the trust chain
+          curl -sS https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o $RUNNER_TEMP/AppleWWDRCAG3.cer
+          security import $RUNNER_TEMP/AppleWWDRCAG3.cer -k $KEYCHAIN_PATH
+
+          # Import our custom certificate
+          security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/56MY3ZN5V7.com.uusafe.portal.mobileprovision
