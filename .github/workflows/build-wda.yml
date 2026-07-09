@@ -24,8 +24,13 @@ jobs:
           PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          echo -n "$P12_PASSWORD" | wc -c
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 -D > $CERTIFICATE_PATH
+          ls -la $CERTIFICATE_PATH
+          
+          # Convert P12 to legacy format for macOS compatibility
+          openssl pkcs12 -in $CERTIFICATE_PATH -passin pass:"$P12_PASSWORD" -out $RUNNER_TEMP/temp.pem -nodes
+          openssl pkcs12 -export -in $RUNNER_TEMP/temp.pem -out $CERTIFICATE_PATH -passout pass:"$P12_PASSWORD" -legacy
+          rm $RUNNER_TEMP/temp.pem
           ls -la $CERTIFICATE_PATH
           
           echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 -D > $PP_PATH
