@@ -27,9 +27,9 @@ jobs:
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 -D > $CERTIFICATE_PATH
           ls -la $CERTIFICATE_PATH
           
-          # Convert P12 to legacy format for macOS compatibility using OpenSSL 3 from Homebrew
-          /opt/homebrew/bin/openssl pkcs12 -in $CERTIFICATE_PATH -passin pass:"$P12_PASSWORD" -out $RUNNER_TEMP/temp.pem -nodes
-          /opt/homebrew/bin/openssl pkcs12 -export -in $RUNNER_TEMP/temp.pem -out $CERTIFICATE_PATH -passout pass:"$P12_PASSWORD" -legacy
+          # Convert P12 to legacy format using standard algorithms compatible with LibreSSL
+          openssl pkcs12 -in $CERTIFICATE_PATH -passin pass:"$P12_PASSWORD" -out $RUNNER_TEMP/temp.pem -nodes
+          openssl pkcs12 -export -in $RUNNER_TEMP/temp.pem -out $CERTIFICATE_PATH -passout pass:"$P12_PASSWORD" -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES
           rm $RUNNER_TEMP/temp.pem
           ls -la $CERTIFICATE_PATH
           
