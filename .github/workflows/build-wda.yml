@@ -30,11 +30,16 @@ jobs:
           EXPORT_DIR=$RUNNER_TEMP/Exported
           mkdir -p $EXPORT_DIR/Payload
           
+          # Diagnostic print to find the exact structure
+          echo "=== Diagnostic: Listing RUNNER_TEMP ==="
+          ls -R $RUNNER_TEMP
+          echo "========================================"
+          
           # Find the compiled .app bundle dynamically and copy to Payload directory
-          APP_PATH=$(find $RUNNER_TEMP/WDA.xcarchive -name "*.app" -type d | head -n 1)
+          APP_PATH=$(find $RUNNER_TEMP -name "*.app" -type d | head -n 1)
           echo "Found compiled app at: $APP_PATH"
           if [ -z "$APP_PATH" ]; then
-            echo "Error: No .app bundle found in archive!"
+            echo "Error: No .app bundle found!"
             exit 1
           fi
           
