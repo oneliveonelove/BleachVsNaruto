@@ -25,33 +25,18 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGN_ENTITLEMENTS=""
 
-      - name: Create Export Options Plist
+      - name: Package IPA (Zip Payload)
         run: |
-          cat <<EOF > wda_export_options.plist
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>development</string>
-              <key>compileBitcode</key>
-              <false/>
-              <key>uploadSymbols</key>
-              <false/>
-              <key>signingStyle</key>
-              <string>manual</string>
-          </dict>
-          </plist>
-          EOF
-
-      - name: Export WDA IPA (Unsigned)
-        run: |
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/WDA.xcarchive \
-            -exportPath $RUNNER_TEMP/Exported \
-            -exportOptionsPlist wda_export_options.plist \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGN_REQUIRED=NO
+          EXPORT_DIR=$RUNNER_TEMP/Exported
+          mkdir -p $EXPORT_DIR/Payload
+          
+          # Copy the compiled .app bundle to Payload directory
+          cp -r $RUNNER_TEMP/WDA.xcarchive/Products/Applications/*.app $EXPORT_DIR/Payload/
+          
+          # Compress to IPA format
+          cd $EXPORT_DIR
+          zip -r WebDriverAgentRunner.ipa Payload
+          ls -la WebDriverAgentRunner.ipa
 
       - name: Upload WDA Artifact
         uses: actions/upload-artifact@v4
