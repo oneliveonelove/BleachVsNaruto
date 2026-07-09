@@ -13,13 +13,14 @@ jobs:
           repository: appium/WebDriverAgent
           ref: master
 
-      - name: Build and Archive WebDriverAgentRunner (Unsigned)
+      - name: Build WebDriverAgentRunner (Unsigned)
         run: |
-          xcodebuild archive \
+          xcodebuild build \
             -project WebDriverAgent.xcodeproj \
             -scheme WebDriverAgentRunner \
             -destination 'generic/platform=iOS' \
-            -archivePath $RUNNER_TEMP/WDA.xcarchive \
+            -configuration Release \
+            SYMROOT=$RUNNER_TEMP/Build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -30,20 +31,13 @@ jobs:
           EXPORT_DIR=$RUNNER_TEMP/Exported
           mkdir -p $EXPORT_DIR/Payload
           
-          # Diagnostic print to find the exact structure
-          echo "=== Diagnostic: Listing RUNNER_TEMP ==="
-          ls -R $RUNNER_TEMP
-          echo "========================================"
+          # Diagnostic print to verify build output
+          echo "=== Diagnostic: Listing SYMROOT ==="
+          ls -R $RUNNER_TEMP/Build
+          echo "===================================="
           
-          # Find the compiled .app bundle dynamically and copy to Payload directory
-          APP_PATH=$(find $RUNNER_TEMP -name "*.app" -type d | head -n 1)
-          echo "Found compiled app at: $APP_PATH"
-          if [ -z "$APP_PATH" ]; then
-            echo "Error: No .app bundle found!"
-            exit 1
-          fi
-          
-          cp -r "$APP_PATH" $EXPORT_DIR/Payload/
+          # Copy the compiled .app bundle to Payload directory
+          cp -r $RUNNER_TEMP/Build/Release-iphoneos/WebDriverAgentRunner-Runner.app $EXPORT_DIR/Payload/
           
           # Compress to IPA format
           cd $EXPORT_DIR
