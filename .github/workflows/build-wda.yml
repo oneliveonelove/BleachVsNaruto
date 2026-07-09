@@ -18,11 +18,9 @@ jobs:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
           BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_MOBILEPROVISION_BASE64 }}
-          KEYCHAIN_PASSWORD: "buildagentpassword"
         run: |
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
           PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 -D > $CERTIFICATE_PATH
           ls -la $CERTIFICATE_PATH
@@ -36,15 +34,46 @@ jobs:
           echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 -D > $PP_PATH
           ls -la $PP_PATH
 
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security default-keychain -s $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          # Import to standard login keychain (which contains Apple intermediate certificates)
+          security unlock-keychain -p "" ~/Library/Keychains/login.keychain-db
+          security import $CERTIFICATE_PATH -k ~/Library/Keychains/login.keychain-db -P "$P12_PASSWORD" -A -t cert -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" ~/Library/Keychains/login.keychain-db
 
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/56MY3ZN5V7.com.uusafe.portal.mobileprovision
+
+      - name: Patch WebDriverAgent Xcode Project
+        run: |
+          python3 -c '
+          import re
+          proj_path = "WebDriverAgent.xcodeproj/project.pbxproj"
+          with open(proj_path, "r") as f:
+              content = f.read()
+              
+          # Regex to find buildSettings block containing com.facebook.WebDriverAgentRunner
+          pattern = r"(buildSettings\s*=\s*\{[^}]*PRODUCT_BUNDLE_IDENTIFIER\s*=\s*(?:\"com\.facebook\.WebDriverAgentRunner\"|com\.facebook\.WebDriverAgentRunner);[^}]*\})"
+          
+          def replace_config(match):
+              block = match.group(1)
+              # Replace bundle ID
+              block = block.replace("com.facebook.WebDriverAgentRunner", "com.uusafe.portal")
+              # Remove duplicate keys if they exist
+              block = re.sub(r"DEVELOPMENT_TEAM\s*=\s*[^;]+;", "", block)
+              block = re.sub(r"PROVISIONING_PROFILE_SPECIFIER\s*=\s*[^;]+;", "", block)
+              block = re.sub(r"CODE_SIGN_IDENTITY\s*=\s*[^;]+;", "", block)
+              block = re.sub(r"CODE_SIGN_STYLE\s*=\s*[^;]+;", "", block)
+              
+              # Insert signing parameters
+              insert_str = "\n\t\t\t\tDEVELOPMENT_TEAM = 56MY3ZN5V7;\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = MosDistribute;\n\t\t\t\tCODE_SIGN_IDENTITY = \"iPhone Distribution\";\n\t\t\t\tCODE_SIGN_STYLE = Manual;"
+              block = block.replace("buildSettings = {", "buildSettings = {" + insert_str)
+              return block
+              
+          modified_content = re.sub(pattern, replace_config, content)
+          with open(proj_path, "w") as f:
+              f.write(modified_content)
+              
+          print("Xcode project successfully patched for target WebDriverAgentRunner!")
+          '
 
       - name: Create Export Options Plist
         run: |
@@ -78,12 +107,7 @@ jobs:
             -project WebDriverAgent.xcodeproj \
             -scheme WebDriverAgentRunner \
             -destination 'generic/platform=iOS' \
-            -archivePath $RUNNER_TEMP/WDA.xcarchive \
-            PRODUCT_BUNDLE_IDENTIFIER="com.uusafe.portal" \
-            DEVELOPMENT_TEAM="56MY3ZN5V7" \
-            CODE_SIGN_STYLE="Manual" \
-            PROVISIONING_PROFILE_SPECIFIER="MosDistribute" \
-            CODE_SIGN_IDENTITY="iPhone Distribution"
+            -archivePath $RUNNER_TEMP/WDA.xcarchive
 
       - name: Export WDA IPA
         run: |
