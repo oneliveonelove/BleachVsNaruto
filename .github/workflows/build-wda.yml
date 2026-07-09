@@ -30,8 +30,15 @@ jobs:
           EXPORT_DIR=$RUNNER_TEMP/Exported
           mkdir -p $EXPORT_DIR/Payload
           
-          # Copy the compiled .app bundle to Payload directory
-          cp -r $RUNNER_TEMP/WDA.xcarchive/Products/Applications/*.app $EXPORT_DIR/Payload/
+          # Find the compiled .app bundle dynamically and copy to Payload directory
+          APP_PATH=$(find $RUNNER_TEMP/WDA.xcarchive -name "*.app" -type d | head -n 1)
+          echo "Found compiled app at: $APP_PATH"
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: No .app bundle found in archive!"
+            exit 1
+          fi
+          
+          cp -r "$APP_PATH" $EXPORT_DIR/Payload/
           
           # Compress to IPA format
           cd $EXPORT_DIR
