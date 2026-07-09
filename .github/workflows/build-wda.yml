@@ -1,0 +1,90 @@
+name: Build and Sign WDA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout WebDriverAgent
+        uses: actions/checkout@v3
+        with:
+          repository: appium/WebDriverAgent
+          ref: master
+
+      - name: Install Apple Certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_MOBILEPROVISION_BASE64 }}
+          KEYCHAIN_PASSWORD: "buildagentpassword"
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security default-keychain -s $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/56MY3ZN5V7.com.uusafe.portal.mobileprovision
+
+      - name: Create Export Options Plist
+        run: |
+          cat <<EOF > wda_export_options.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>enterprise</string>
+              <key>teamID</key>
+              <string>56MY3ZN5V7</string>
+              <key>compileBitcode</key>
+              <false/>
+              <key>uploadSymbols</key>
+              <false/>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>com.uusafe.portal</key>
+                  <string>MosDistribute</string>
+              </dict>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Build and Archive WebDriverAgentRunner
+        run: |
+          xcodebuild archive \
+            -project WebDriverAgent.xcodeproj \
+            -scheme WebDriverAgentRunner \
+            -destination 'generic/platform=iOS' \
+            -archivePath $RUNNER_TEMP/WDA.xcarchive \
+            PRODUCT_BUNDLE_IDENTIFIER="com.uusafe.portal" \
+            DEVELOPMENT_TEAM="56MY3ZN5V7" \
+            CODE_SIGN_STYLE="Manual" \
+            PROVISIONING_PROFILE_SPECIFIER="MosDistribute" \
+            CODE_SIGN_IDENTITY="iPhone Distribution"
+
+      - name: Export WDA IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/WDA.xcarchive \
+            -exportPath $RUNNER_TEMP/Exported \
+            -exportOptionsPlist wda_export_options.plist
+
+      - name: Upload WDA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebDriverAgentRunner
+          path: ${{ runner.temp }}/Exported/WebDriverAgentRunner.ipa
